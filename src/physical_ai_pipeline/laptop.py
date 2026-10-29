@@ -107,7 +107,8 @@ def clean_video(
     cv2.setNumThreads(options.threads)
     try:
         with av.open(str(part), "w") as container, audit_path.open("w", encoding="utf-8") as audit:
-            stream = container.add_stream("libx264", rate=Fraction(reader.info.fps).limit_denominator(100000))
+            output_rate = Fraction(reader.info.fps).limit_denominator(100000)
+            stream = container.add_stream("libx264", rate=output_rate)
             width = min(reader.info.width, options.max_width or reader.info.width) & ~1
             height = max(2, round(reader.info.height * width / reader.info.width) & ~1)
             stream.width, stream.height, stream.pix_fmt = width, height, "yuv420p"
@@ -130,7 +131,7 @@ def clean_video(
                     frame = av.VideoFrame.from_ndarray(record.image, format="bgr24")
                     frame = frame.reformat(width=width, height=height, format="yuv420p")
                     frame.pts = kept
-                    frame.time_base = Fraction(1, 1) / stream.average_rate
+                    frame.time_base = Fraction(1, 1) / output_rate
                     for packet in stream.encode(frame):
                         container.mux(packet)
                     kept += 1
@@ -242,7 +243,7 @@ def _add_audio(
         audio = src.streams.audio[0]
         audio.codec_context.thread_count = options.threads
         vs = src.streams.video[0]
-        origin = float((vs.start_time or 0) * vs.time_base)
+        origin = float(vs.start_time * vs.time_base) if vs.start_time is not None and vs.time_base is not None else 0.0
         resampler = av.AudioResampler(format="fltp", layout="mono", rate=rate)
 
         def chunks() -> Iterator[tuple[int, Any]]:
@@ -252,7 +253,7 @@ def _add_audio(
                 for frame in resampler.resample(decoded):
                     start = (
                         round((float(frame.pts * frame.time_base) - origin) * rate)
-                        if frame.pts is not None
+                        if frame.pts is not None and frame.time_base is not None
                         else next_start
                     )
                     samples = frame.to_ndarray().reshape(-1)
