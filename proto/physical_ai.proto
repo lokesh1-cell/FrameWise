@@ -1,0 +1,243 @@
+// Physical AI Video Cleaning Pipeline: MCAP channel schemas.
+//
+// Every non-image channel in a session .mcap is encoded with these messages.
+// Image channels use the Foxglove well-known schemas in foxglove/foxglove.proto
+// (foxglove.CompressedImage, foxglove.RawImage, foxglove.ImageAnnotations) so
+// Foxglove Studio renders them natively.
+//
+// PRIVACY: no message in this file may carry face crops, face embeddings, or
+// age estimates. Child detection is represented only by DropEvent metadata.
+
+syntax = "proto3";
+
+package physical_ai.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ---------------------------------------------------------------------------
+// Geometry primitives
+// ---------------------------------------------------------------------------
+
+// Axis-aligned box in source-image pixel coordinates (top-left origin).
+message BoundingBox {
+  float x_min = 1;
+  float y_min = 2;
+  float x_max = 3;
+  float y_max = 4;
+}
+
+message Keypoint {
+  float x = 1;
+  float y = 2;
+  float confidence = 3;
+  // COCO-17 name for body keypoints ("left_wrist"), or hand joint name
+  // ("index_tip") for hand keypoints.
+  string name = 4;
+}
+
+// ---------------------------------------------------------------------------
+// /detections
+// ---------------------------------------------------------------------------
+
+message ObjectDetection {
+  int32 class_id = 1;
+  string class_name = 2;
+  float confidence = 3;
+  BoundingBox bbox = 4;
+}
+
+// YOLOv8n-pose output: one person with 17 COCO keypoints.
+message PersonPose {
+  float confidence = 1;
+  BoundingBox bbox = 2;
+  repeated Keypoint keypoints = 3;
+}
+
+enum Handedness {
+  HANDEDNESS_UNSPECIFIED = 0;
+  HANDEDNESS_LEFT = 1;
+  HANDEDNESS_RIGHT = 2;
+}
+
+// Hand detection with 21 hand keypoints (wrist + 4 joints per finger).
+message HandDetection {
+  float confidence = 1;
+  BoundingBox bbox = 2;
+  repeated Keypoint keypoints = 3;
+  Handedness handedness = 4;
+}
+
+enum InteractionState {
+  INTERACTION_STATE_UNSPECIFIED = 0;
+  INTERACTION_STATE_IDLE = 1;
+  INTERACTION_STATE_APPROACHING = 2;
+  INTERACTION_STATE_GRASPING = 3;
+  INTERACTION_STATE_HOLDING = 4;
+  INTERACTION_STATE_RELEASING = 5;
+}
+
+// Per-hand grasp annotation for Physical AI training (never used to drop).
+message GraspAnnotation {
+  // Index into FrameDetections.hands.
+  int32 hand_index = 1;
+  // Index into FrameDetections.objects, or -1 when no object is associated.
+  int32 object_index = 2;
+  float hand_object_iou = 3;
+  InteractionState state = 4;
+  float grasp_confidence = 5;
+  // Hand-to-object center distance normalised by hand box diagonal.
+  float normalized_distance = 6;
+}
+
+message FrameDetections {
+  google.protobuf.Timestamp timestamp = 1;
+  string frame_id = 2;
+  uint64 frame_index = 3;
+  repeated ObjectDetection objects = 4;
+  repeated PersonPose poses = 5;
+  repeated HandDetection hands = 6;
+  repeated GraspAnnotation grasps = 7;
+  uint32 person_count = 8;
+  // True when the scheduled / out-of-cycle child check ran on this frame.
+  // The check result itself is never stored for kept frames.
+  bool child_check_performed = 9;
+}
+
+// ---------------------------------------------------------------------------
+// /quality
+// ---------------------------------------------------------------------------
+
+message FrameQuality {
+  google.protobuf.Timestamp timestamp = 1;
+  uint64 frame_index = 2;
+  bool decode_ok = 3;
+  float corrupt_block_ratio = 4;
+  float luminance_mean = 5;
+  float laplacian_variance = 6;
+  // Hamming distance of the 64-bit pHash to the previous evaluated frame
+  // (-1 when there is no previous frame).
+  int32 phash_hamming_distance = 7;
+  // Mean Farneback flow magnitude in full-resolution pixels (-1 if unknown).
+  float optical_flow_magnitude = 8;
+  bool kept = 9;
+}
+
+// ---------------------------------------------------------------------------
+// /actions
+// ---------------------------------------------------------------------------
+
+message ActionSegment {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+  uint64 start_frame = 3;
+  uint64 end_frame = 4;
+  // e.g. "grasp:cup"
+  string label = 5;
+  Handedness hand = 6;
+  string object_class = 7;
+  float mean_grasp_confidence = 8;
+  // Frame counts per phase within the segment.
+  uint32 approaching_frames = 9;
+  uint32 grasping_frames = 10;
+  uint32 holding_frames = 11;
+  uint32 releasing_frames = 12;
+}
+
+// ---------------------------------------------------------------------------
+// /pipeline/drop_log
+// ---------------------------------------------------------------------------
+
+enum DropReason {
+  DROP_REASON_UNSPECIFIED = 0;
+  DROP_REASON_DECODE_ERROR = 1;
+  DROP_REASON_UNDEREXPOSED = 2;
+  DROP_REASON_OVEREXPOSED = 3;
+  DROP_REASON_BLURRY = 4;
+  DROP_REASON_DUPLICATE = 5;
+  DROP_REASON_IDLE = 6;
+  DROP_REASON_CHILD_DETECTED = 7;
+  DROP_REASON_PHONE_USAGE = 8;
+  DROP_REASON_OFF_TASK = 9;
+  DROP_REASON_FAKE_WORK = 10;
+  DROP_REASON_ISOLATED_ISLAND = 11;
+}
+
+enum FilterMode {
+  FILTER_MODE_UNSPECIFIED = 0;
+  FILTER_MODE_SHADOW = 1;
+  FILTER_MODE_SOFT = 2;
+  FILTER_MODE_HARD = 3;
+}
+
+// A contiguous inclusive range of dropped frames sharing the same primary
+// reason. Child exclusions carry the anchor frames that produced them.
+message DropEvent {
+  google.protobuf.Timestamp timestamp = 1;
+  uint64 start_frame = 2;
+  uint64 end_frame = 3;
+  DropReason reason = 4;
+  // Every reason that fired on any frame in the range.
+  repeated DropReason all_reasons = 5;
+  FilterMode mode = 6;
+  // CHILD_DETECTED only: sampled frames F_k whose detections were merged
+  // into this exclusion block.
+  repeated uint64 anchor_frames = 7;
+  uint64 frame_count = 8;
+}
+
+// ---------------------------------------------------------------------------
+// /session/metadata
+// ---------------------------------------------------------------------------
+
+message CameraIntrinsics {
+  uint32 width = 1;
+  uint32 height = 2;
+  double fx = 3;
+  double fy = 4;
+  double cx = 5;
+  double cy = 6;
+  // "plumb_bob" when distortion is known, "none" when not calibrated.
+  string distortion_model = 7;
+  repeated double distortion = 8;
+  bool calibrated = 9;
+}
+
+message ModelInfo {
+  string name = 1;
+  string role = 2;
+  string engine_path = 3;
+  string sha256 = 4;
+  string precision = 5;
+}
+
+message ProcessingStats {
+  uint64 total_frames = 1;
+  uint64 kept_frames = 2;
+  uint64 dropped_frames = 3;
+  map<string, uint64> dropped_by_reason = 4;
+  uint64 child_detection_events = 5;
+  uint64 child_checks_scheduled = 6;
+  uint64 child_checks_out_of_cycle = 7;
+  uint64 gpu_frames = 8;
+  double wall_seconds = 9;
+  double frames_per_second = 10;
+  uint64 restored_by_smoothing = 11;
+}
+
+message SessionMetadata {
+  google.protobuf.Timestamp timestamp = 1;
+  string session_id = 2;
+  string source_uri = 3;
+  string source_sha256 = 4;
+  string pipeline_version = 5;
+  string git_commit = 6;
+  CameraIntrinsics intrinsics = 7;
+  repeated ModelInfo models = 8;
+  ProcessingStats stats = 9;
+  repeated string task_whitelist = 10;
+  double source_fps = 11;
+  google.protobuf.Timestamp session_start = 12;
+  google.protobuf.Timestamp session_end = 13;
+  // JSON dump of the effective PipelineConfig thresholds.
+  string config_json = 14;
+}

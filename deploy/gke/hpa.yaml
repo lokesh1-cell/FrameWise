@@ -1,0 +1,30 @@
+# Scales workers on the Pub/Sub backlog. Requires the Custom Metrics
+# Stackdriver Adapter (https://github.com/GoogleCloudPlatform/k8s-stackdriver).
+# Node autoscaling on the l4-spot pool follows the pending GPU pods; at
+# zero backlog the deployment and the node pool scale to zero.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pap-worker
+  namespace: pap
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: pap-worker}
+  minReplicas: 0
+  maxReplicas: 4
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: pubsub.googleapis.com|subscription|num_undelivered_messages
+          selector:
+            matchLabels:
+              resource.labels.subscription_id: raw-video-finalize-sub
+        target:
+          type: AverageValue
+          averageValue: "2"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 900   # do not kill a pod mid-session
+      policies: [{type: Pods, value: 1, periodSeconds: 300}]
+    scaleUp:
+      policies: [{type: Pods, value: 2, periodSeconds: 60}]

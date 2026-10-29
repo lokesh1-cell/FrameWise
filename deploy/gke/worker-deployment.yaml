@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pap-worker
+  namespace: pap
+  labels: {app: pap-worker}
+spec:
+  replicas: 0            # HPA owns the replica count
+  selector:
+    matchLabels: {app: pap-worker}
+  template:
+    metadata:
+      labels: {app: pap-worker}
+    spec:
+      serviceAccountName: pap-worker
+      # Spot nodes get ~30 s notice; the worker cancels and nacks within 20 s.
+      terminationGracePeriodSeconds: 25
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+        cloud.google.com/gke-spot: "true"
+      tolerations:
+        - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+        - {key: cloud.google.com/gke-spot, operator: Equal, value: "true", effect: NoSchedule}
+      containers:
+        - name: worker
+          image: REGION-docker.pkg.dev/PROJECT_ID/pap/worker:GIT_SHA
+          args: ["--config", "/etc/pap/config.yaml"]
+          resources:
+            requests: {cpu: "6", memory: 20Gi, ephemeral-storage: 100Gi}
+            limits: {nvidia.com/gpu: 1, memory: 26Gi, ephemeral-storage: 200Gi}
+          env:
+            - {name: NODE_NAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}
+            - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {fieldPath: metadata.uid}}}
+            - {name: CONTAINER_IMAGE, value: REGION-docker.pkg.dev/PROJECT_ID/pap/worker:GIT_SHA}
+          volumeMounts:
+            - {name: config, mountPath: /etc/pap}
+            - {name: scratch, mountPath: /scratch}
+            - {name: engines, mountPath: /models/engines}
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/pap-heartbeat) )) -lt 120"]
+            initialDelaySeconds: 120
+            periodSeconds: 30
+      volumes:
+        - {name: config, configMap: {name: pap-config}}
+        - {name: scratch, emptyDir: {sizeLimit: 200Gi}}
+        - {name: engines, emptyDir: {sizeLimit: 2Gi}}

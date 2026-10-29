@@ -1,0 +1,53 @@
+# Builds TensorRT engines on an L4 (sm_89) with the worker image's TensorRT
+# version and uploads them plus manifest.json to the models bucket.
+# Inputs: ONNX files and INT8 calibration frames under gs://project-models/onnx
+# and gs://project-models/calib (consented, child-free frames only).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pap-engine-build
+  namespace: pap
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      serviceAccountName: pap-worker
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+      tolerations:
+        - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+        - {key: cloud.google.com/gke-spot, operator: Equal, value: "true", effect: NoSchedule}
+      containers:
+        - name: build
+          image: REGION-docker.pkg.dev/PROJECT_ID/pap/worker:GIT_SHA
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              from pathlib import Path
+              from physical_ai_pipeline.cloud.gcs import GoogleCloudStorage, GcsRef
+              store = GoogleCloudStorage()
+              for prefix, dest in (("onnx/", "/work/onnx"), ("calib/", "/work/calib")):
+                  for ref in store.list(GcsRef("project-models", prefix)):
+                      store.download(ref, Path(dest) / Path(ref.name).relative_to(prefix))
+              PY
+              python -m physical_ai_pipeline.inference.export.build_engine \
+                --onnx-dir /work/onnx --out /work/engines --calib-dir /work/calib
+              python - <<'PY'
+              from pathlib import Path
+              from physical_ai_pipeline.cloud.gcs import GoogleCloudStorage, GcsRef
+              import tensorrt
+              store = GoogleCloudStorage()
+              prefix = f"engines/trt-{'.'.join(tensorrt.__version__.split('.')[:2])}/"
+              files = sorted(Path("/work/engines").glob("*.engine")) + [Path("/work/engines/manifest.json")]
+              for path in files:  # manifest last
+                  store.upload(path, GcsRef("project-models", prefix + path.name), "application/octet-stream")
+              PY
+          resources:
+            limits: {nvidia.com/gpu: 1, memory: 24Gi}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+      volumes:
+        - {name: work, emptyDir: {}}

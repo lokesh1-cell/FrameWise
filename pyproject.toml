@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "physical-ai-pipeline"
+version = "1.1.0"
+description = "FrameWise: local video quality workspace and cloud video-cleaning pipeline"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.9",
+  "av>=12",
+  "protobuf>=5.27",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "pyyaml>=6",
+  "mcap>=1.1",
+  "mcap-protobuf-support>=0.5",
+]
+
+[project.optional-dependencies]
+gpu = ["tensorrt>=10.3", "cuda-python>=12.4"]
+cloud = ["google-cloud-pubsub>=2.21", "google-cloud-storage>=2.16", "google-cloud-bigquery>=3.25"]
+export = ["ultralytics>=8.2", "onnx>=1.16", "onnxslim>=0.1"]
+dev = ["pytest>=8", "grpcio-tools>=1.64", "mypy>=1.10", "ruff>=0.5"]
+
+[project.scripts]
+framewise = "physical_ai_pipeline.desktop:main"
+pap = "physical_ai_pipeline.cli:main"
+pap-ui = "physical_ai_pipeline.desktop:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+physical_ai_pipeline = ["proto_gen/*.fds", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["src/physical_ai_pipeline/proto_gen"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+exclude = ["proto_gen/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["physical_ai_pipeline", "conftest"]
+
+[[tool.mypy.overrides]]
+module = ["physical_ai_pipeline.proto_gen.*"]
+ignore_errors = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]

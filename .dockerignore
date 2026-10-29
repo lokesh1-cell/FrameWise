@@ -1,0 +1,16 @@
+.git
+.venv
+.framewise
+output/
+.pytest_cache
+.ruff_cache
+.mypy_cache
+dist/
+build/
+.env
+.env.*
+**/__pycache__
+**/*.pyc
+tests/
+out/
+*.mcap

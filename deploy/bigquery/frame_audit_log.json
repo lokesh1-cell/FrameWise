@@ -1,0 +1,12 @@
+[
+  {"name": "session_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "source_uri", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "event_time", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "reason", "type": "STRING", "mode": "REQUIRED", "description": "DropReason, e.g. CHILD_DETECTED"},
+  {"name": "anchor_frame", "type": "INT64", "mode": "NULLABLE", "description": "F_k for CHILD_DETECTED"},
+  {"name": "dropped_range", "type": "INT64", "mode": "REPEATED", "description": "[start_frame, end_frame] inclusive"},
+  {"name": "frame_count", "type": "INT64", "mode": "REQUIRED"},
+  {"name": "filter_name", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "filter_mode", "type": "STRING", "mode": "REQUIRED", "description": "SHADOW | SOFT | HARD"},
+  {"name": "pipeline_version", "type": "STRING", "mode": "REQUIRED"}
+]

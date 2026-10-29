@@ -1,0 +1,31 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install desktop test display
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth python3-tk
+      - name: Install project and check tools
+        run: python -m pip install -e '.[dev]'
+      - name: Generate protobuf modules
+        run: bash scripts/compile_proto.sh
+      - name: Lint
+        run: ruff check src tests
+      - name: Type check
+        run: mypy src/physical_ai_pipeline
+      - name: Test processing and native UI
+        run: xvfb-run -a python -m pytest
+      - name: Build distribution
+        run: python -m pip wheel --no-deps . --wheel-dir dist

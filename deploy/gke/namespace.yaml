@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pap
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pap-worker
+  namespace: pap
+  annotations:
+    iam.gke.io/gcp-service-account: pap-worker@PROJECT_ID.iam.gserviceaccount.com

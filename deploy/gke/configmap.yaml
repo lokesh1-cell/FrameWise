@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pap-config
+  namespace: pap
+data:
+  config.yaml: |
+    inference:
+      batch_size: 32
+      engine_dir: /models/engines
+    tier3:
+      off_task:
+        task_whitelist: []   # per-session override: x-goog-meta-task-whitelist
+    cloud:
+      project_id: PROJECT_ID
+      subscription: raw-video-finalize-sub
+      raw_bucket: project-raw
+      output_bucket: project-clean
+      models_uri: gs://project-models/engines/trt-10.7
+      bigquery_table: PROJECT_ID.physical_ai.frame_audit_log
+      scratch_dir: /scratch

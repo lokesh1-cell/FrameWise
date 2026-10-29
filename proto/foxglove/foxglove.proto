@@ -1,0 +1,84 @@
+// Subset of the Foxglove well-known schemas (https://docs.foxglove.dev/docs/visualization/message-schemas)
+// re-declared so the pipeline has no runtime dependency on the foxglove-schemas
+// package. Foxglove Studio matches these by full message name and field names,
+// so they must stay identical to the upstream definitions.
+
+syntax = "proto3";
+
+package foxglove;
+
+import "google/protobuf/timestamp.proto";
+
+// /camera/image_compressed
+message CompressedImage {
+  google.protobuf.Timestamp timestamp = 1;
+  string frame_id = 4;
+  bytes data = 2;
+  // "jpeg", "png", "webp" or "avif"
+  string format = 3;
+}
+
+// /camera/depth (encoding "16UC1")
+message RawImage {
+  google.protobuf.Timestamp timestamp = 1;
+  string frame_id = 7;
+  fixed32 width = 2;
+  fixed32 height = 3;
+  string encoding = 4;
+  fixed32 step = 5;
+  bytes data = 6;
+}
+
+message Color {
+  double r = 1;
+  double g = 2;
+  double b = 3;
+  double a = 4;
+}
+
+message Point2 {
+  double x = 1;
+  double y = 2;
+}
+
+message CircleAnnotation {
+  google.protobuf.Timestamp timestamp = 1;
+  Point2 position = 2;
+  double diameter = 3;
+  double thickness = 4;
+  Color fill_color = 5;
+  Color outline_color = 6;
+}
+
+message PointsAnnotation {
+  enum Type {
+    UNKNOWN = 0;
+    POINTS = 1;
+    LINE_LOOP = 2;
+    LINE_STRIP = 3;
+    LINE_LIST = 4;
+  }
+  google.protobuf.Timestamp timestamp = 1;
+  Type type = 2;
+  repeated Point2 points = 3;
+  Color outline_color = 4;
+  repeated Color outline_colors = 5;
+  Color fill_color = 6;
+  double thickness = 7;
+}
+
+message TextAnnotation {
+  google.protobuf.Timestamp timestamp = 1;
+  Point2 position = 2;
+  string text = 3;
+  double font_size = 4;
+  Color text_color = 5;
+  Color background_color = 6;
+}
+
+// /camera/annotations
+message ImageAnnotations {
+  repeated CircleAnnotation circles = 1;
+  repeated PointsAnnotation points = 2;
+  repeated TextAnnotation texts = 3;
+}

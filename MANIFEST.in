@@ -1,0 +1,3 @@
+include README.md LAPTOP_ANALYSIS.md VALIDATION.md run_ui.sh
+recursive-include proto *.proto
+recursive-include scripts *.sh
